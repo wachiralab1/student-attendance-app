@@ -118,4 +118,5 @@ if 'df' in st.session_state:
         st.subheader("📊 กราฟวิเคราะห์ข้อมูล")
         
         status_df = df['ประเมินผล'].value_counts().reset_index()
-        status_df.
+        status_df = df['ประเมินผล'].value_counts().reset_index()
+        status_df.columns = ['สถานะ', 'จำนวน']
