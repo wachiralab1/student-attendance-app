@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import datetime
-import plotly.express as px # เพิ่มไลบรารีสร้างกราฟที่สวยงามขึ้น
+import plotly.express as px
 
 # 1. ตั้งค่าหน้าเพจ
 st.set_page_config(page_title="ระบบเช็กชื่อเข้าแถว", page_icon="🚩", layout="wide")
@@ -43,7 +43,7 @@ if 'df' in st.session_state:
     # สร้าง Tab
     tab1, tab2 = st.tabs(["📋 เช็กชื่อประจำวัน", "📊 สรุปผลรายเดือน"])
 
-    # --- TAB 1: ระบบเช็กชื่อ ---
+    # --- TAB 1: ระบบเช็กชื่อ (ปุ่มบันทึกและดาวน์โหลดต้องอยู่ตรงนี้) ---
     with tab1:
         st.subheader("เช็กชื่อประจำวัน")
         
@@ -67,17 +67,27 @@ if 'df' in st.session_state:
             use_container_width=True
         )
         
+        # --- ส่วนของปุ่มบันทึกและดาวน์โหลดไฟล์ ---
         if st.button("💾 บันทึกข้อมูลของวันนี้"):
             st.success(f"บันทึกข้อมูลการเข้าแถวประจำวันที่ {check_date.strftime('%d/%m/%Y')} สำเร็จ!")
+            
+        st.markdown("---")
+        st.write("📥 **อย่าลืมดาวน์โหลดไฟล์อัปเดตเพื่อนำมาใช้ในวันพรุ่งนี้**")
+        
+        csv = df.to_csv(index=False).encode('utf-8-sig')
+        st.download_button(
+            label="ดาวน์โหลดฐานข้อมูลล่าสุด (.CSV)",
+            data=csv,
+            file_name=f"student_database_{check_date.strftime('%Y%m%d')}.csv",
+            mime="text/csv",
+        )
 
-    # --- TAB 2: สรุปผลและสถิติ (รูปแบบใหม่) ---
+    # --- TAB 2: สรุปผลและสถิติ ---
     with tab2:
         st.subheader("สรุปสถิติและประเมินเกณฑ์ 80%")
         
-        # จัดกลุ่มสถานะ
         df['ประเมินผล'] = df['เปอร์เซ็นต์ (%)'].apply(lambda x: '✅ ผ่าน' if x >= 80 else '⚠️ เฝ้าระวัง' if x >= 70 else '❌ ไม่ผ่าน')
         
-        # --- ส่วนที่ 1: การ์ดสรุปตัวเลข (Metric Cards) ---
         total_students = len(df)
         pass_count = len(df[df['ประเมินผล'] == '✅ ผ่าน'])
         warn_count = len(df[df['ประเมินผล'] == '⚠️ เฝ้าระวัง'])
@@ -91,7 +101,6 @@ if 'df' in st.session_state:
         
         st.markdown("---")
         
-        # --- ส่วนที่ 2: ตารางข้อมูลลงสี ---
         def highlight_percentage(val):
             if val >= 80:
                 color = '#d4edda' 
@@ -106,44 +115,7 @@ if 'df' in st.session_state:
         
         st.markdown("---")
         
-        # --- ส่วนที่ 3: กราฟสถิติแบบแยกสี (Plotly) ---
         st.subheader("📊 กราฟวิเคราะห์ข้อมูล")
         
         status_df = df['ประเมินผล'].value_counts().reset_index()
-        status_df.columns = ['สถานะ', 'จำนวน']
-        
-        # กำหนดสีให้ตรงกับสถานะ (เขียว, เหลือง, แดง)
-        color_map = {'✅ ผ่าน': '#28a745', '⚠️ เฝ้าระวัง': '#ffc107', '❌ ไม่ผ่าน': '#dc3545'}
-        
-        col_chart1, col_chart2 = st.columns(2)
-        
-        # กราฟโดนัท (สัดส่วน)
-        with col_chart1:
-            fig_pie = px.pie(status_df, values='จำนวน', names='สถานะ', 
-                             title='สัดส่วนสถานะนักเรียน',
-                             color='สถานะ', color_discrete_map=color_map, hole=0.4)
-            st.plotly_chart(fig_pie, use_container_width=True)
-            
-        # กราฟแท่ง (จำนวนคน)
-        with col_chart2:
-            fig_bar = px.bar(status_df, x='สถานะ', y='จำนวน', 
-                             title='จำนวนนักเรียนแยกตามสถานะ',
-                             color='สถานะ', color_discrete_map=color_map, text='จำนวน')
-            fig_bar.update_traces(textposition='outside')
-            st.plotly_chart(fig_bar, use_container_width=True)
-if st.button("💾 บันทึกข้อมูลของวันนี้"):
-            # ตัวอย่างการจำลองบวกเลขจำนวนวันเพิ่มเมื่อกดบันทึก
-            # (ในระบบจริงจะนำข้อมูลไปประมวลผลเพิ่ม)
-            st.success(f"บันทึกข้อมูลการเข้าแถวประจำวันที่ {check_date.strftime('%d/%m/%Y')} สำเร็จ!")
-            
-        st.markdown("---")
-        st.write("📥 **อย่าลืมดาวน์โหลดไฟล์อัปเดตเพื่อนำมาใช้ในวันพรุ่งนี้**")
-        
-        # แปลงข้อมูลในตารางเป็นไฟล์ CSV (รองรับภาษาไทยด้วย utf-8-sig)
-        csv = df.to_csv(index=False).encode('utf-8-sig')
-        st.download_button(
-            label="ดาวน์โหลดฐานข้อมูลล่าสุด (.CSV)",
-            data=csv,
-            file_name=f"student_database_{check_date.strftime('%Y%m%d')}.csv",
-            mime="text/csv",
-        )
+        status_df.
