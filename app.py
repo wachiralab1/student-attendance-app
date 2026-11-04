@@ -9,11 +9,14 @@ st.set_page_config(page_title="ระบบเช็กชื่อเข้า�
 st.title("🚩 ระบบเช็กชื่อกิจกรรมหน้าเสาธง")
 st.markdown("วิเคราะห์สถิติการร่วมกิจกรรม และประเมินเกณฑ์ผ่าน (80%)")
 
-# 2. เมนูด้านข้างสำหรับอัปโหลดไฟล์
 st.sidebar.header("ตั้งค่าข้อมูล")
 uploaded_file = st.sidebar.file_uploader("อัปโหลดไฟล์รายชื่อ (CSV/Excel)", type=["csv", "xlsx"])
 
-# 3. ตรวจสอบไฟล์อัปโหลด / ข้อมูลตัวอย่าง
+# 2. สร้างหน่วยความจำจำลอง (Session State) สำหรับเก็บประวัติการบันทึก
+if 'history' not in st.session_state:
+    st.session_state['history'] = pd.DataFrame(columns=['วันที่', 'รหัสนักเรียน', 'ชื่อ-นามสกุล', 'สถานะ'])
+
+# 3. นำเข้าข้อมูล
 if uploaded_file is None:
     st.info("👈 กรุณาอัปโหลดไฟล์รายชื่อที่เมนูด้านซ้าย หรือกดปุ่มด้านล่างเพื่อดูตัวอย่าง")
     if st.button("คลิกเพื่อโหลดข้อมูลตัวอย่าง (Demo Data)"):
@@ -36,19 +39,16 @@ else:
 if 'df' in st.session_state:
     df = st.session_state['df']
     
-    # คำนวณเปอร์เซ็นต์
     if 'เปอร์เซ็นต์ (%)' not in df.columns:
         df['เปอร์เซ็นต์ (%)'] = (df['จำนวนวันที่มาสะสม'] / df['วันเปิดเรียนสะสม']) * 100
         
-    # สร้าง Tab
-    tab1, tab2 = st.tabs(["📋 เช็กชื่อประจำวัน", "📊 สรุปผลรายเดือน"])
+    # สร้าง 3 Tab (เพิ่ม Tab ประวัติการบันทึก)
+    tab1, tab2, tab3 = st.tabs(["📋 เช็กชื่อประจำวัน", "📊 สรุปผลรายเดือน", "🕒 ประวัติที่บันทึกไว้"])
 
-    # --- TAB 1: ระบบเช็กชื่อ (ปุ่มบันทึกและดาวน์โหลดต้องอยู่ตรงนี้) ---
+    # --- TAB 1: ระบบเช็กชื่อ ---
     with tab1:
         st.subheader("เช็กชื่อประจำวัน")
-        
         check_date = st.date_input("📅 เลือกวันที่เช็กชื่อ", datetime.date.today())
-        st.write(f"เลือกสถานะการมาเข้าแถวของนักเรียน ประจำวันที่ **{check_date.strftime('%d/%m/%Y')}**")
         
         df_edit = df[['รหัสนักเรียน', 'ชื่อ-นามสกุล']].copy()
         df_edit['สถานะวันนี้'] = "มา" 
@@ -58,7 +58,6 @@ if 'df' in st.session_state:
             column_config={
                 "สถานะวันนี้": st.column_config.SelectboxColumn(
                     "สถานะ (คลิกเพื่อเปลี่ยน)",
-                    help="เลือกสถานะการมา",
                     options=["มา", "ลาป่วย", "ลากิจ", "สาย", "ขาด"],
                     required=True,
                 )
@@ -67,26 +66,30 @@ if 'df' in st.session_state:
             use_container_width=True
         )
         
-        # --- ส่วนของปุ่มบันทึกและดาวน์โหลดไฟล์ ---
         if st.button("💾 บันทึกข้อมูลของวันนี้"):
-            st.success(f"บันทึกข้อมูลการเข้าแถวประจำวันที่ {check_date.strftime('%d/%m/%Y')} สำเร็จ!")
+            # นำข้อมูลที่เช็กชื่อไปเก็บในประวัติ
+            today_data = edited_df.copy()
+            today_data['วันที่'] = check_date.strftime('%d/%m/%Y')
+            today_data = today_data.rename(columns={'สถานะวันนี้': 'สถานะ'})
             
-        st.markdown("---")
-        st.write("📥 **อย่าลืมดาวน์โหลดไฟล์อัปเดตเพื่อนำมาใช้ในวันพรุ่งนี้**")
-        
-        csv = df.to_csv(index=False).encode('utf-8-sig')
-        st.download_button(
-            label="ดาวน์โหลดฐานข้อมูลล่าสุด (.CSV)",
-            data=csv,
-            file_name=f"student_database_{check_date.strftime('%Y%m%d')}.csv",
-            mime="text/csv",
-        )
+            st.session_state['history'] = pd.concat([st.session_state['history'], today_data], ignore_index=True)
+            st.success(f"บันทึกข้อมูลวันที่ {check_date.strftime('%d/%m/%Y')} ลงในระบบสำเร็จ! (ตรวจสอบได้ที่แท็บ 'ประวัติที่บันทึกไว้')")
 
     # --- TAB 2: สรุปผลและสถิติ ---
     with tab2:
         st.subheader("สรุปสถิติและประเมินเกณฑ์ 80%")
         
         df['ประเมินผล'] = df['เปอร์เซ็นต์ (%)'].apply(lambda x: '✅ ผ่าน' if x >= 80 else '⚠️ เฝ้าระวัง' if x >= 70 else '❌ ไม่ผ่าน')
+        
+        # ปุ่มดาวน์โหลดผลสถิติสรุป
+        csv_summary = df.to_csv(index=False).encode('utf-8-sig')
+        st.download_button(
+            label="📥 ดาวน์โหลดไฟล์สรุปสถิติ (CSV)",
+            data=csv_summary,
+            file_name=f"summary_stats_{datetime.date.today().strftime('%Y%m%d')}.csv",
+            mime="text/csv",
+        )
+        st.markdown("---")
         
         total_students = len(df)
         pass_count = len(df[df['ประเมินผล'] == '✅ ผ่าน'])
@@ -114,9 +117,36 @@ if 'df' in st.session_state:
         st.dataframe(styled_df, use_container_width=True, hide_index=True)
         
         st.markdown("---")
-        
         st.subheader("📊 กราฟวิเคราะห์ข้อมูล")
         
         status_df = df['ประเมินผล'].value_counts().reset_index()
-        status_df = df['ประเมินผล'].value_counts().reset_index()
         status_df.columns = ['สถานะ', 'จำนวน']
+        color_map = {'✅ ผ่าน': '#28a745', '⚠️ เฝ้าระวัง': '#ffc107', '❌ ไม่ผ่าน': '#dc3545'}
+        
+        col_chart1, col_chart2 = st.columns(2)
+        with col_chart1:
+            fig_pie = px.pie(status_df, values='จำนวน', names='สถานะ', title='สัดส่วนสถานะนักเรียน', color='สถานะ', color_discrete_map=color_map, hole=0.4)
+            st.plotly_chart(fig_pie, use_container_width=True)
+        with col_chart2:
+            fig_bar = px.bar(status_df, x='สถานะ', y='จำนวน', title='จำนวนนักเรียนแยกตามสถานะ', color='สถานะ', color_discrete_map=color_map, text='จำนวน')
+            fig_bar.update_traces(textposition='outside')
+            st.plotly_chart(fig_bar, use_container_width=True)
+
+    # --- TAB 3: ประวัติการเช็กชื่อ (ของใหม่) ---
+    with tab3:
+        st.subheader("🕒 ประวัติการเช็กชื่อที่บันทึกไว้")
+        st.write("ข้อมูลที่คุณกด 'บันทึก' ในแต่ละวัน จะถูกเก็บรวมไว้ที่นี่")
+        
+        if not st.session_state['history'].empty:
+            st.dataframe(st.session_state['history'], use_container_width=True, hide_index=True)
+            
+            # ปุ่มดาวน์โหลดประวัติทั้งหมด
+            csv_history = st.session_state['history'].to_csv(index=False).encode('utf-8-sig')
+            st.download_button(
+                label="📥 ดาวน์โหลดประวัติการเช็กชื่อทั้งหมด (CSV)",
+                data=csv_history,
+                file_name=f"attendance_history_{datetime.date.today().strftime('%Y%m%d')}.csv",
+                mime="text/csv",
+            )
+        else:
+            st.info
