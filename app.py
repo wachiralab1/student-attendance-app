@@ -50,7 +50,6 @@ if 'df' in st.session_state:
         st.subheader("เช็กชื่อประจำวัน")
         check_date = st.date_input("📅 เลือกวันที่เช็กชื่อ", datetime.date.today())
         
-        # --- ฟังก์ชันใหม่: ตั้งค่าทุกคนพร้อมกัน (Bulk Action) ---
         st.markdown("⚙️ **ตั้งค่าสถานะเริ่มต้นให้ทุกคน (เลือกเพื่อรีเซ็ตตาราง):**")
         bulk_status = st.radio(
             "เลือกสถานะ:",
@@ -61,9 +60,8 @@ if 'df' in st.session_state:
         st.markdown("---")
         
         df_edit = df[['รหัสนักเรียน', 'ชื่อ-นามสกุล']].copy()
-        df_edit['สถานะวันนี้'] = bulk_status # นำค่าจากปุ่มด้านบนมาตั้งเป็นค่าเริ่มต้น
+        df_edit['สถานะวันนี้'] = bulk_status 
         
-        # ใส่ key ผูกกับ วันที่ และ bulk_status เพื่อบังคับให้ตารางล้างค่าเก่าทิ้งเมื่อเปลี่ยนวันหรือกดปุ่ม
         editor_key = f"editor_{check_date}_{bulk_status}"
         
         edited_df = st.data_editor(
@@ -85,15 +83,13 @@ if 'df' in st.session_state:
             today_data['วันที่'] = check_date.strftime('%d/%m/%Y')
             today_data = today_data.rename(columns={'สถานะวันนี้': 'สถานะ'})
             
-            # ลบข้อมูลเก่าของวันนี้ออกก่อน (ป้องกันการบันทึกซ้ำวันเดิม)
             current_history = st.session_state['history']
             current_history = current_history[current_history['วันที่'] != check_date.strftime('%d/%m/%Y')]
             
-            # รวมข้อมูลใหม่เข้าไป
             st.session_state['history'] = pd.concat([current_history, today_data], ignore_index=True)
             st.success(f"บันทึกข้อมูลวันที่ {check_date.strftime('%d/%m/%Y')} สำเร็จ!")
 
-    # --- TAB 2: สรุปผลสถิติ (Grid View แบบ ToSchool) ---
+    # --- TAB 2: สรุปผลสถิติ ---
     with tab2:
         st.subheader("สรุปสถิติและประเมินเกณฑ์ 80%")
         history_df = st.session_state['history']
@@ -160,13 +156,24 @@ if 'df' in st.session_state:
     # --- TAB 3: ประวัติที่แก้ไขได้ (Edit History) ---
     with tab3:
         st.subheader("✏️ จัดการและแก้ไขประวัติย้อนหลัง")
-        st.write("หากลงข้อมูลผิด คุณสามารถแก้ไขสถานะตรงนี้ หรือเลือกแถวแล้วกดปุ่ม Delete (ลบ) บนคีย์บอร์ดได้เลย")
+        st.write("เลือกรวมหรือแยกวันเพื่อดูข้อมูล หากลงผิดสามารถแก้สถานะตรงนี้แล้วกดบันทึกได้เลย")
         
         history_df = st.session_state['history']
         
         if not history_df.empty:
+            # 1. สร้าง Dropdown เลือกวันที่
+            available_dates = history_df['วันที่'].unique().tolist()
+            selected_date = st.selectbox("📅 เลือกวันที่ต้องการดู/แก้ไข:", ["แสดงทั้งหมด"] + available_dates)
+            
+            # 2. กรองตารางตามที่เลือก
+            if selected_date == "แสดงทั้งหมด":
+                df_to_edit = history_df
+            else:
+                df_to_edit = history_df[history_df['วันที่'] == selected_date]
+            
+            # 3. นำข้อมูลที่กรองแล้วมาแสดงให้แก้
             edited_history = st.data_editor(
-                history_df,
+                df_to_edit,
                 num_rows="dynamic",
                 use_container_width=True,
                 hide_index=True
@@ -175,7 +182,15 @@ if 'df' in st.session_state:
             col_btn1, col_btn2 = st.columns(2)
             with col_btn1:
                 if st.button("💾 บันทึกการแก้ไขประวัติ"):
-                    st.session_state['history'] = edited_history
+                    # 4. ลอจิกการเซฟกลับเข้าไปในฐานข้อมูล
+                    if selected_date == "แสดงทั้งหมด":
+                        st.session_state['history'] = edited_history
+                    else:
+                        # ดึงข้อมูลวันอื่นๆ (ที่ไม่ใช่วันที่กำลังแก้) เก็บไว้ก่อน
+                        kept_history = st.session_state['history'][st.session_state['history']['วันที่'] != selected_date]
+                        # เอาข้อมูลวันอื่นๆ มารวมกับข้อมูลวันที่เพิ่งแก้เสร็จ
+                        st.session_state['history'] = pd.concat([kept_history, edited_history], ignore_index=True)
+                        
                     st.success("อัปเดตประวัติสำเร็จ! (ข้อมูลในแท็บสถิติเปลี่ยนตามแล้ว)")
                     
             with col_btn2:
