@@ -42,7 +42,7 @@ if 'df' in st.session_state:
     if 'เปอร์เซ็นต์ (%)' not in df.columns:
         df['เปอร์เซ็นต์ (%)'] = (df['จำนวนวันที่มาสะสม'] / df['วันเปิดเรียนสะสม']) * 100
         
-    # สร้าง 3 Tab (เพิ่ม Tab ประวัติการบันทึก)
+    # สร้าง 3 Tab
     tab1, tab2, tab3 = st.tabs(["📋 เช็กชื่อประจำวัน", "📊 สรุปผลรายเดือน", "🕒 ประวัติที่บันทึกไว้"])
 
     # --- TAB 1: ระบบเช็กชื่อ ---
@@ -67,7 +67,6 @@ if 'df' in st.session_state:
         )
         
         if st.button("💾 บันทึกข้อมูลของวันนี้"):
-            # นำข้อมูลที่เช็กชื่อไปเก็บในประวัติ
             today_data = edited_df.copy()
             today_data['วันที่'] = check_date.strftime('%d/%m/%Y')
             today_data = today_data.rename(columns={'สถานะวันนี้': 'สถานะ'})
@@ -81,7 +80,6 @@ if 'df' in st.session_state:
         
         df['ประเมินผล'] = df['เปอร์เซ็นต์ (%)'].apply(lambda x: '✅ ผ่าน' if x >= 80 else '⚠️ เฝ้าระวัง' if x >= 70 else '❌ ไม่ผ่าน')
         
-        # ปุ่มดาวน์โหลดผลสถิติสรุป
         csv_summary = df.to_csv(index=False).encode('utf-8-sig')
         st.download_button(
             label="📥 ดาวน์โหลดไฟล์สรุปสถิติ (CSV)",
@@ -132,21 +130,39 @@ if 'df' in st.session_state:
             fig_bar.update_traces(textposition='outside')
             st.plotly_chart(fig_bar, use_container_width=True)
 
-    # --- TAB 3: ประวัติการเช็กชื่อ (ของใหม่) ---
+    # --- TAB 3: ประวัติการเช็กชื่อ (รูปแบบใหม่ มีตัวกรองวันที่) ---
     with tab3:
         st.subheader("🕒 ประวัติการเช็กชื่อที่บันทึกไว้")
-        st.write("ข้อมูลที่คุณกด 'บันทึก' ในแต่ละวัน จะถูกเก็บรวมไว้ที่นี่")
         
-        if not st.session_state['history'].empty:
-            st.dataframe(st.session_state['history'], use_container_width=True, hide_index=True)
+        history_df = st.session_state['history']
+        
+        if not history_df.empty:
+            # 1. ดึงวันที่ทั้งหมดที่มีในระบบมาทำเป็น Dropdown
+            available_dates = history_df['วันที่'].unique().tolist()
+            options = ["แสดงทั้งหมด"] + available_dates
             
-            # ปุ่มดาวน์โหลดประวัติทั้งหมด
-            csv_history = st.session_state['history'].to_csv(index=False).encode('utf-8-sig')
+            selected_date = st.selectbox("📅 เลือกดูข้อมูลตามวันที่:", options)
+            
+            # 2. กรองข้อมูลตามที่เลือก
+            if selected_date == "แสดงทั้งหมด":
+                filtered_history = history_df
+                file_name = "attendance_history_all.csv"
+            else:
+                filtered_history = history_df[history_df['วันที่'] == selected_date]
+                date_str = selected_date.replace('/', '') # แปลง / ออกเพื่อตั้งชื่อไฟล์
+                file_name = f"attendance_history_{date_str}.csv"
+            
+            # 3. แสดงตารางที่กรองแล้ว
+            st.write(f"**กำลังแสดงข้อมูลของ:** {selected_date}")
+            st.dataframe(filtered_history, use_container_width=True, hide_index=True)
+            
+            # 4. ปุ่มดาวน์โหลด (ดาวน์โหลดเฉพาะข้อมูลที่กำลังแสดงอยู่)
+            csv_history = filtered_history.to_csv(index=False).encode('utf-8-sig')
             st.download_button(
-                label="📥 ดาวน์โหลดประวัติการเช็กชื่อทั้งหมด (CSV)",
+                label=f"📥 ดาวน์โหลดข้อมูลที่แสดง (CSV)",
                 data=csv_history,
-                file_name=f"attendance_history_{datetime.date.today().strftime('%Y%m%d')}.csv",
+                file_name=file_name,
                 mime="text/csv",
             )
         else:
-            st.info
+            st.info("ยังไม่มีข้อมูลการบันทึกในระบบ (ลองกดบันทึกในหน้า 'เช็กชื่อประจำวัน' ก่อนครับ)")
