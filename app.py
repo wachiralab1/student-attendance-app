@@ -131,3 +131,19 @@ if 'df' in st.session_state:
                              color='สถานะ', color_discrete_map=color_map, text='จำนวน')
             fig_bar.update_traces(textposition='outside')
             st.plotly_chart(fig_bar, use_container_width=True)
+if st.button("💾 บันทึกข้อมูลของวันนี้"):
+            # ตัวอย่างการจำลองบวกเลขจำนวนวันเพิ่มเมื่อกดบันทึก
+            # (ในระบบจริงจะนำข้อมูลไปประมวลผลเพิ่ม)
+            st.success(f"บันทึกข้อมูลการเข้าแถวประจำวันที่ {check_date.strftime('%d/%m/%Y')} สำเร็จ!")
+            
+        st.markdown("---")
+        st.write("📥 **อย่าลืมดาวน์โหลดไฟล์อัปเดตเพื่อนำมาใช้ในวันพรุ่งนี้**")
+        
+        # แปลงข้อมูลในตารางเป็นไฟล์ CSV (รองรับภาษาไทยด้วย utf-8-sig)
+        csv = df.to_csv(index=False).encode('utf-8-sig')
+        st.download_button(
+            label="ดาวน์โหลดฐานข้อมูลล่าสุด (.CSV)",
+            data=csv,
+            file_name=f"student_database_{check_date.strftime('%Y%m%d')}.csv",
+            mime="text/csv",
+        )
