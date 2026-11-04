@@ -9,7 +9,7 @@ st.set_page_config(page_title="ระบบเช็กชื่อเข้า�
 st.title("🚩 ระบบเช็กชื่อกิจกรรมหน้าเสาธง")
 st.markdown("วิเคราะห์สถิติการร่วมกิจกรรม และประเมินเกณฑ์ผ่าน (80%) ในรูปแบบที่ง่ายกว่า")
 
-# 2. เมนูด้านข้าง (อัปเกรดให้อัปโหลดประวัติเดิมมาทำต่อได้)
+# 2. เมนูด้านข้าง
 st.sidebar.header("📁 1. นำเข้าข้อมูลรายชื่อ")
 uploaded_file = st.sidebar.file_uploader("อัปโหลดไฟล์รายชื่อ (CSV/Excel)", type=["csv", "xlsx"])
 
@@ -17,13 +17,21 @@ st.sidebar.markdown("---")
 st.sidebar.header("📂 2. อัปโหลดประวัติเดิม (ถ้ามี)")
 uploaded_history = st.sidebar.file_uploader("อัปโหลดไฟล์ประวัติเดิมมาทำต่อ (CSV)", type=["csv"])
 
-# 3. จัดการข้อมูล Session State
+# 3. จัดการข้อมูล Session State พร้อมตรวจสอบความถูกต้องของคอลัมน์
 if 'history' not in st.session_state:
     st.session_state['history'] = pd.DataFrame(columns=['วันที่', 'รหัสนักเรียน', 'ชื่อ-นามสกุล', 'สถานะ'])
 
 if uploaded_history is not None:
-    st.session_state['history'] = pd.read_csv(uploaded_history)
-    st.sidebar.success("โหลดประวัติเดิมสำเร็จ!")
+    try:
+        loaded_df = pd.read_csv(uploaded_history)
+        # ตรวจสอบว่าไฟล์ที่อัปโหลดมีคอลัมน์ 'วันที่' หรือไม่
+        if 'วันที่' in loaded_df.columns:
+            st.session_state['history'] = loaded_df
+            st.sidebar.success("โหลดประวัติเดิมสำเร็จ!")
+        else:
+            st.sidebar.error("ไฟล์ประวัติไม่ถูกต้อง (ไม่มีคอลัมน์ 'วันที่') กรุณาใช้ไฟล์ที่ดาวน์โหลดจากระบบนี้เท่านั้น")
+    except Exception as e:
+        st.sidebar.error("เกิดข้อผิดพลาดในการอ่านไฟล์ประวัติ")
 
 if uploaded_file is None:
     st.info("👈 กรุณาอัปโหลดไฟล์รายชื่อที่เมนูด้านซ้าย หรือกดปุ่มด้านล่างเพื่อดูตัวอย่าง")
@@ -84,7 +92,8 @@ if 'df' in st.session_state:
             today_data = today_data.rename(columns={'สถานะวันนี้': 'สถานะ'})
             
             current_history = st.session_state['history']
-            current_history = current_history[current_history['วันที่'] != check_date.strftime('%d/%m/%Y')]
+            if 'วันที่' in current_history.columns:
+                current_history = current_history[current_history['วันที่'] != check_date.strftime('%d/%m/%Y')]
             
             st.session_state['history'] = pd.concat([current_history, today_data], ignore_index=True)
             st.success(f"บันทึกข้อมูลวันที่ {check_date.strftime('%d/%m/%Y')} สำเร็จ!")
@@ -94,8 +103,8 @@ if 'df' in st.session_state:
         st.subheader("สรุปสถิติและประเมินเกณฑ์ 80%")
         history_df = st.session_state['history']
         
-        if history_df.empty:
-            st.info("⚠️ ยังไม่มีประวัติการเช็กชื่อในระบบ")
+        if history_df.empty or 'วันที่' not in history_df.columns:
+            st.info("⚠️ ยังไม่มีประวัติการเช็กชื่อในระบบ หรือรูปแบบข้อมูลไม่ถูกต้อง")
         else:
             total_days = history_df['วันที่'].nunique()
             st.write(f"🔄 **ข้อมูลสะสม: `{total_days}` วัน**")
@@ -153,25 +162,22 @@ if 'df' in st.session_state:
                 fig_bar.update_traces(textposition='outside')
                 st.plotly_chart(fig_bar, use_container_width=True)
 
-    # --- TAB 3: ประวัติที่แก้ไขได้ (Edit History) ---
+    # --- TAB 3: ประวัติที่แก้ไขได้ ---
     with tab3:
         st.subheader("✏️ จัดการและแก้ไขประวัติย้อนหลัง")
         st.write("เลือกรวมหรือแยกวันเพื่อดูข้อมูล หากลงผิดสามารถแก้สถานะตรงนี้แล้วกดบันทึกได้เลย")
         
         history_df = st.session_state['history']
         
-        if not history_df.empty:
-            # 1. สร้าง Dropdown เลือกวันที่
+        if not history_df.empty and 'วันที่' in history_df.columns:
             available_dates = history_df['วันที่'].unique().tolist()
             selected_date = st.selectbox("📅 เลือกวันที่ต้องการดู/แก้ไข:", ["แสดงทั้งหมด"] + available_dates)
             
-            # 2. กรองตารางตามที่เลือก
             if selected_date == "แสดงทั้งหมด":
                 df_to_edit = history_df
             else:
                 df_to_edit = history_df[history_df['วันที่'] == selected_date]
             
-            # 3. นำข้อมูลที่กรองแล้วมาแสดงให้แก้
             edited_history = st.data_editor(
                 df_to_edit,
                 num_rows="dynamic",
@@ -182,13 +188,10 @@ if 'df' in st.session_state:
             col_btn1, col_btn2 = st.columns(2)
             with col_btn1:
                 if st.button("💾 บันทึกการแก้ไขประวัติ"):
-                    # 4. ลอจิกการเซฟกลับเข้าไปในฐานข้อมูล
                     if selected_date == "แสดงทั้งหมด":
                         st.session_state['history'] = edited_history
                     else:
-                        # ดึงข้อมูลวันอื่นๆ (ที่ไม่ใช่วันที่กำลังแก้) เก็บไว้ก่อน
                         kept_history = st.session_state['history'][st.session_state['history']['วันที่'] != selected_date]
-                        # เอาข้อมูลวันอื่นๆ มารวมกับข้อมูลวันที่เพิ่งแก้เสร็จ
                         st.session_state['history'] = pd.concat([kept_history, edited_history], ignore_index=True)
                         
                     st.success("อัปเดตประวัติสำเร็จ! (ข้อมูลในแท็บสถิติเปลี่ยนตามแล้ว)")
